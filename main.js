@@ -156,7 +156,7 @@ function renderKams(){
   })).sort((a,b)=>b.m.estimate-a.m.estimate);
 
   $('#kamTable').innerHTML=kams.length?kams.map((x,i)=>{
-    const reason=x.m.cancelled?(x.reason.common?`${x.reason.common.label} (${x.reason.common.count})`:'Sin motivo documentado'):'—';
+  const reason=x.m.cancelled?(x.reason.common?x.reason.common.label:'Sin motivo documentado'):'—';
     return `<tr class="clickable" data-kam="${esc(x.name)}"><td>${i+1}</td><td><strong>${esc(x.name)}</strong></td><td>${x.m.count}</td><td class="number">${mxn.format(x.m.total)}</td><td class="number">${mxn.format(x.m.closed)}</td><td class="number">${mxn.format(x.m.estimate)}</td><td>${(x.m.conversion*100).toFixed(0)}%</td><td class="number">${mxn.format(x.m.open)}</td><td>${x.m.risk}</td><td>${x.m.cancelled}</td><td>${x.doctors}</td><td>${esc(reason)}</td></tr>`;
   }).join(''):`<tr><td colspan="12" class="small">No hay datos para los filtros seleccionados.</td></tr>`;
 
