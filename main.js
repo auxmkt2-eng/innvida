@@ -3,54 +3,822 @@ import { getFirestore, collection, doc, onSnapshot, updateDoc } from "https://ww
 
 const STATUS = ["Sin seguimiento", "Cotización enviada", "En negociación", "Cerrada / aceptada", "Perdida / rechazada", "Cancelada"];
 const WEIGHTS = {"Cerrada / aceptada":1,"En negociación":.6,"Cotización enviada":.35,"Sin seguimiento":.15,"Perdida / rechazada":0,"Cancelada":0};
-// Ajuste este umbral si cambia la definición de una cotización de alto valor.
 const HIGH_VALUE_THRESHOLD = 100000;
 const REASON_FIELDS = ["motivo","comentario","motivo/comentario","motivo comentario","motivoComentario"];
 const mxn = new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0});
 const monthName = new Intl.DateTimeFormat("es-MX",{month:"long",year:"numeric"});
 let rows=[], filtered=[], goals=[], dbs={}, activeGoalKey="";
-const $=s=>document.querySelector(s), sum=(a,f=x=>x)=>a.reduce((t,x)=>t+(Number(f(x))||0),0), norm=s=>(s||"").toString().trim().toLowerCase();
+
+const $=s=>document.querySelector(s);
+const sum=(a,f=x=>x)=>a.reduce((t,x)=>t+(Number(f(x))||0),0);
+const norm=s=>(s||"").toString().trim().toLowerCase();
 const keyNorm=s=>norm(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
-const STATUS_ALIASES={"sinseguimiento":"Sin seguimiento","cotizacionenviada":"Cotización enviada","ennegociacion":"En negociación","cerrada":"Cerrada / aceptada","aceptada":"Cerrada / aceptada","cerradaaceptada":"Cerrada / aceptada","perdida":"Perdida / rechazada","rechazada":"Perdida / rechazada","perdidarechazada":"Perdida / rechazada","cancelada":"Cancelada","cancelado":"Cancelada","cancelacion":"Cancelada"};
+
+const STATUS_ALIASES={
+  sinseguimiento:"Sin seguimiento",
+  cotizacionenviada:"Cotización enviada",
+  ennegociacion:"En negociación",
+  cerrada:"Cerrada / aceptada",
+  aceptada:"Cerrada / aceptada",
+  cerradaaceptada:"Cerrada / aceptada",
+  perdida:"Perdida / rechazada",
+  rechazada:"Perdida / rechazada",
+  perdidarechazada:"Perdida / rechazada",
+  cancelada:"Cancelada",
+  cancelado:"Cancelada",
+  cancelacion:"Cancelada"
+};
+
 const canonicalStatus=value=>STATUS_ALIASES[keyNorm(value)]||(value||"Sin seguimiento").toString().trim();
-function firstValue(data,names){const wanted=new Set(names.map(keyNorm));const entry=Object.entries(data).find(([key,value])=>wanted.has(keyNorm(key))&&value!==undefined&&value!==null&&String(value).trim()!=="");return entry?entry[1]:""}
-const validDate=v=>{if(!v)return null;const d=new Date(`${String(v).slice(0,10)}T12:00:00`);return Number.isNaN(d.valueOf())?null:d};
-const isoToday=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
-const goalKey=()=>($('#toDate')?.value||isoToday()).slice(0,7);
+
+function firstValue(data,names){
+  const wanted=new Set(names.map(keyNorm));
+  const entry=Object.entries(data).find(([key,value])=>wanted.has(keyNorm(key))&&value!==undefined&&value!==null&&String(value).trim()!=="");
+  return entry?entry[1]:"";
+}
+
+const validDate=v=>{
+  if(!v)return null;
+  const d=new Date(`${String(v).slice(0,10)}T12:00:00`);
+  return Number.isNaN(d.valueOf())?null:d;
+};
+
+const isoToday=()=>{
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+};
+
+const goalKey=()=>($("#toDate")?.value||isoToday()).slice(0,7);
 const goalPeriod=()=>monthName.format(validDate(`${goalKey()}-01`));
 const goalStorageKey=key=>`innvida-goals-${key}`;
-function syncGoalPeriod(){const next=goalKey();if(next!==activeGoalKey){activeGoalKey=next;goals=JSON.parse(localStorage.getItem(goalStorageKey(next))||"[]")}const label=`Metas de ${goalPeriod()}`;$('#goalsTitle').textContent=label;$('#goalPeriodHeader').textContent=`Meta ${goalPeriod()}`;$('#goalDialogPeriod').textContent=`Meta ${goalPeriod()}`;}
-function showToast(message,kind="success"){const toast=$('#toast');toast.textContent=message;toast.className=`toast show ${kind}`;clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.className="toast",3600)}
-function mapDoc(snap, brand){const d=snap.data(), phone=d.telefono||"", site=brand==="SANARE"?({"722 197 08 36":"Toluca","55 5255 8403":"Narvarte"}[phone.trim()]||""):"";return {id:snap.id,brand,folio:d.folio||"—",date:d.fechaEmision||"",closeDate:d.fechaCierre||"",patient:d.paciente||"",doctor:d.medico||"",kam:d.kam||"",insurer:d.aseguradora||"",site,total:Number(d.total)||0,status:canonicalStatus(d.status1),status2:d.status2||"",reason:firstValue(d,REASON_FIELDS),nextAction:d.proximaAccion||d.seguimiento||"",items:brand==="NOMAD"?(d.pruebas||[]):(d.servicios||[]),collection:"cotizaciones"};}
-function isClosed(r){return r.status==="Cerrada / aceptada"} function isLost(r){return ["Perdida / rechazada","Cancelada"].includes(r.status)}
-function daysOpen(r){const d=validDate(r.date);return d?Math.max(0,Math.floor((Date.now()-d)/86400000)):null}
-function risk(r){if(isClosed(r)||isLost(r))return "low";const days=daysOpen(r)||0;if(r.status==="Sin seguimiento"||days>30)return "high";if(days>14||r.status==="Cotización enviada")return "medium";return "low"}
-function estimated(r){return r.total*(WEIGHTS[r.status]??.15)}
-function doctorIdentity(name){return keyNorm(name)}
-function uniqueDoctors(list){const doctors=new Map();list.forEach(r=>{const id=doctorIdentity(r.doctor);if(id&&!doctors.has(id))doctors.set(id,String(r.doctor).trim())});return doctors}
-function normalizedReason(reason){const label=String(reason||"").trim();return {key:label?label.toLocaleLowerCase("es-MX"):"__missing__",label:label||"No reason recorded."}}
-function cancellationReasonSummary(list){const cancelled=list.filter(r=>r.status==="Cancelada"), groups=new Map();cancelled.forEach(r=>{const reason=normalizedReason(r.reason),entry=groups.get(reason.key)||{label:reason.label,count:0};entry.count++;groups.set(reason.key,entry)});const missing=groups.get("__missing__")?.count||0, common=[...groups.entries()].filter(([key])=>key!=="__missing__").map(([,entry])=>entry).sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,"es")).at(0);return {count:cancelled.length,missing,common};}
-function scopedRowsForDoctorHistory(){const brand=$('#brandFilter').value,kam=$('#kamFilter').value,site=$('#siteFilter').value;return rows.filter(r=>(!brand||r.brand===brand)&&(!kam||r.kam===kam)&&(!site||r.site===site))}
-function newDoctors(){const from=$('#fromDate').value,to=$('#toDate').value, history=scopedRowsForDoctorHistory(), firstQuote=new Map();history.forEach(r=>{const id=doctorIdentity(r.doctor),date=validDate(r.date);if(!id||!date)return;const current=firstQuote.get(id);if(!current||date<current.date)firstQuote.set(id,{date,name:String(r.doctor).trim()})});const visible=uniqueDoctors(filtered);return [...visible].filter(([id])=>{const first=firstQuote.get(id);if(!first)return false;const date=first.date.toISOString().slice(0,10);return (!from||date>=from)&&(!to||date<=to)}).map(([id,name])=>({id,name,firstDate:firstQuote.get(id).date})).sort((a,b)=>a.name.localeCompare(b.name,"es"));}
-function filterRows(){const from=$("#fromDate").value,to=$("#toDate").value,brand=$("#brandFilter").value,kam=$("#kamFilter").value,doctor=norm($("#doctorFilter").value),status=$("#statusFilter").value,insurer=norm($("#insurerFilter").value),site=$("#siteFilter").value;filtered=rows.filter(r=>(!from||r.date>=from)&&(!to||r.date<=to)&&(!brand||r.brand===brand)&&(!kam||r.kam===kam)&&(!doctor||norm(r.doctor).includes(doctor))&&(!status||r.status===status)&&(!insurer||norm(r.insurer).includes(insurer))&&(!site||r.site===site));syncGoalPeriod();render();}
-function metrics(list){const active=list.filter(r=>!isLost(r)),closed=list.filter(isClosed),open=list.filter(r=>!isClosed(r)&&!isLost(r)),cancelled=list.filter(r=>r.status==="Cancelada"),highValueCancelled=cancelled.filter(r=>r.total>=HIGH_VALUE_THRESHOLD);return {total:sum(list,r=>r.total),closed:sum(closed,r=>r.total),open:sum(open,r=>r.total),cancelled:cancelled.length,cancelledValue:sum(cancelled,r=>r.total),highValueCancelled:highValueCancelled.length,highValueCancelledValue:sum(highValueCancelled,r=>r.total),estimate:sum(active,estimated),count:list.length,conversion:list.length?closed.length/list.length:0,ticket:list.length?sum(list,r=>r.total)/list.length:0,risk:open.filter(r=>risk(r)==="high").length,noFollow:open.filter(r=>r.status==="Sin seguimiento").length,active};}
-function renderKpis(){const m=metrics(filtered), doctors=uniqueDoctors(filtered).size, newDoctorCount=newDoctors().length;const cards=[['Valor total cotizado',mxn.format(m.total),`${m.count} cotizaciones`,''],['Cierre confirmado',mxn.format(m.closed),`${(m.conversion*100).toFixed(1)}% de conversión`,''],['Pipeline abierto',mxn.format(m.open),`${m.risk} caso(s) de alto riesgo`,'warning'],['Cierre estimado ponderado',mxn.format(m.estimate),'Solo oportunidades no perdidas ni canceladas',''],['Médicos únicos',doctors,`${newDoctorCount} médico(s) nuevo(s) en el periodo`,''],['Cotizaciones canceladas',m.cancelled,m.cancelled?`${mxn.format(m.cancelledValue)} descartado`:'Sin cancelaciones','danger'],['Canceladas alto valor',m.highValueCancelled,m.highValueCancelled?`${mxn.format(m.highValueCancelledValue)} · desde ${mxn.format(HIGH_VALUE_THRESHOLD)}`:`Desde ${mxn.format(HIGH_VALUE_THRESHOLD)}`,'danger'],['Casos sin seguimiento',m.noFollow,'Pendientes de una próxima acción','danger']];$('#kpis').innerHTML=cards.map(c=>`<article class="kpi ${c[3]}"><label>${c[0]}</label><strong>${c[1]}</strong><small>${c[2]}</small></article>`).join('');}
-function renderComparison(){const by=b=>metrics(filtered.filter(r=>r.brand===b));const a=by('SANARE'),b=by('NOMAD'),max=Math.max(a.total,b.total,1);$('#brandComparison').innerHTML=[['Sanaré',a],['Nomad',b]].map(([name,m])=>`<div class="brand-row"><strong>${name}</strong><div class="bar"><i style="width:${m.total/max*100}%"></i></div><span class="number">${mxn.format(m.total)}</span></div><div class="small" style="margin:-12px 0 0 100px">Cerrado ${mxn.format(m.closed)} · Estimado ${mxn.format(m.estimate)} · ${m.count} casos</div>`).join('');}
-function renderWeights(){ $('#weights').innerHTML=Object.entries(WEIGHTS).map(([s,w])=>`<div class="weight">${s}<strong>${w*100}%</strong></div>`).join('');}
-function insight(tag,title,body){return `<article class="insight"><span class="tag">${tag}</span><h3>${title}</h3><p>${body}</p></article>`}
-function renderInsights(){const open=filtered.filter(r=>!isClosed(r)&&!isLost(r)), high=[...open].filter(r=>risk(r)==='high'&&!r.nextAction).sort((a,b)=>b.total-a.total).slice(0,3), cancelledHigh=[...filtered].filter(r=>r.status==='Cancelada'&&r.total>=HIGH_VALUE_THRESHOLD).sort((a,b)=>b.total-a.total).slice(0,3), cancellationReasons=cancellationReasonSummary(filtered), byKam=groupBy(open,r=>r.kam||'Sin KAM'), kamRisk=Object.entries(byKam).map(([k,v])=>[k,sum(v.filter(x=>risk(x)==='high'),x=>x.total)]).sort((a,b)=>b[1]-a[1])[0], repeat=Object.entries(groupBy(filtered,r=>doctorIdentity(r.doctor)||'__missing__')).filter(([key])=>key!=="__missing__").filter(([,v])=>v.length>1).sort((a,b)=>sum(b[1],x=>x.total)-sum(a[1],x=>x.total))[0], newDoctorList=newDoctors(), noKam=filtered.filter(r=>!r.kam), stuck=open.filter(r=>(daysOpen(r)||0)>30);const cards=[];if(high.length)cards.push(insight('Rescate prioritario',`${high.length} caso(s) de alto riesgo sin siguiente acción`,`${high.map(r=>`${r.folio} (${mxn.format(r.total)})`).join(', ')}. Pedir al KAM fecha, responsable y siguiente paso hoy.`));if(cancelledHigh.length)cards.push(insight('Cancelaciones prioritarias',`${cancelledHigh.length} cancelación(es) de alto valor`,`${cancelledHigh.map(r=>`${r.folio} (${mxn.format(r.total)})`).join(', ')}. Ordenadas por monto; revisar causa y posibilidad de recuperación.`));if(cancellationReasons.count){const common=cancellationReasons.common, percentage=common?(common.count/cancellationReasons.count*100).toFixed(1):0;cards.push(insight('Motivo de cancelación',common?`${common.label}: ${common.count} caso(s), ${percentage}% de canceladas`:'No hay motivo documentado en las cancelaciones',`${cancellationReasons.missing} cancelación(es) sin motivo documentado. El motivo mostrado es el más frecuente tras normalizar espacios y mayúsculas.`));}if(kamRisk?.[1])cards.push(insight('Riesgo por responsable',`${kamRisk[0]} concentra ${mxn.format(kamRisk[1])} en riesgo`,`Solicitar plan de rescate y fecha de decisión por cada caso de riesgo.`));if(repeat)cards.push(insight('Médico recurrente',`${repeat[1][0].doctor.trim()} tiene ${repeat[1].length} cotizaciones`,`${mxn.format(sum(repeat[1],r=>r.total))} cotizado. La identidad del médico se normaliza para no duplicar variantes de nombre.`));if(newDoctorList.length)cards.push(insight('Médicos nuevos',`${newDoctorList.length} médico(s) único(s) nuevo(s)`,newDoctorList.slice(0,5).map(d=>d.name).join(', ')+(newDoctorList.length>5?'…':'')+'. Se usa la primera cotización del historial cargado con los filtros de marca, KAM y sede.'));if(noKam.length)cards.push(insight('Asignación',`${noKam.length} cotización(es) sin KAM asignado`,`Asignar propietario hoy: estas oportunidades no tienen responsable operativo.`));if(stuck.length)cards.push(insight('Antigüedad',`${stuck.length} caso(s) abiertos más de 30 días`,`Revisar viabilidad: rescatar, actualizar estatus o cerrar aprendizaje.`));$('#priorityCount').textContent=`${cards.length} prioridades`;$('#insights').innerHTML=cards.length?cards.join(''):insight('Sin señal crítica','No hay prioridades bajo los filtros actuales','Al conectar datos aparecerán hallazgos accionables; ningún dato se ha inventado.');}
-function groupBy(list,f){return list.reduce((o,x)=>{const k=f(x);(o[k]??=[]).push(x);return o},{})}
-function renderKams(){const groups=groupBy(filtered,r=>r.kam||'Sin KAM');const kams=Object.entries(groups).map(([name,list])=>({name,list,m:metrics(list),closedQuotes:list.filter(isClosed).length,doctors:uniqueDoctors(list).size,reason:cancellationReasonSummary(list)})).sort((a,b)=>b.m.estimate-a.m.estimate);$('#kamTable').innerHTML=kams.length?kams.map((x,i)=>{const reason=x.m.cancelled?(x.reason.common?x.reason.common.label:'Sin motivo documentado'):'—';return `<tr class="clickable" data-kam="${esc(x.name)}"><td>${i+1}</td><td><strong>${esc(x.name)}</strong></td><td>${x.m.count}</td><td class="number">${mxn.format(x.m.total)}</td><td class="number">${mxn.format(x.m.closed)}</td><td class="number">${mxn.format(x.m.estimate)}</td><td>${(x.m.conversion*100).toFixed(0)}%</td><td class="number">${mxn.format(x.m.open)}</td><td>${x.closedQuotes}</td><td>${x.m.cancelled}</td><td>${x.doctors}</td><td>${esc(reason)}</td></tr>`}).join(''):`<tr><td colspan="12" class="small">No hay datos para los filtros seleccionados.</td></tr>`;document.querySelectorAll('[data-kam]').forEach(el=>el.onclick=()=>{$('#kamFilter').value=el.dataset.kam;filterRows();document.querySelector('.case-panel').scrollIntoView({behavior:'smooth'});});}
-function renderGoals(){const table=$('#goalsTable'),body=table.querySelector('tbody');if(!goals.length){$('#goalsEmpty').hidden=false;table.hidden=true;return}$('#goalsEmpty').hidden=true;table.hidden=false;body.innerHTML=goals.map((g,i)=>{const m=metrics(filtered.filter(r=>norm(r.kam)===norm(g.kam))), gap=g.value-m.estimate;return `<tr><td><strong>${esc(g.kam)}</strong></td><td class="number">${mxn.format(g.value)}</td><td class="number">${mxn.format(m.closed)}</td><td class="number">${mxn.format(m.estimate)}</td><td class="number">${mxn.format(gap)}</td><td>${g.value?((m.closed/g.value)*100).toFixed(1):0}%</td><td><button class="text-button delete-goal" data-i="${i}">Eliminar</button></td></tr>`}).join('');document.querySelectorAll('.delete-goal').forEach(b=>b.onclick=()=>{goals.splice(b.dataset.i,1);saveGoals();renderGoals()});}
-function renderCases(){$('#caseCount').textContent=`${filtered.length} casos`;$('#caseTable').innerHTML=[...filtered].sort((a,b)=>({high:0,medium:1,low:2}[risk(a)]-{high:0,medium:1,low:2}[risk(b)])).map(r=>`<tr><td><span class="risk ${risk(r)}">${risk(r)==='high'?'ALTO':risk(r)==='medium'?'MEDIO':'BAJO'}</span></td><td>${esc(r.date||'—')}</td><td>${esc(r.folio)}</td><td>${esc(r.kam||'Sin asignar')}</td><td><strong>${esc(r.doctor||'—')}</strong><br><span class="small">${esc(r.patient||'—')}</span></td><td>${r.brand}</td><td class="number">${mxn.format(r.total)}</td><td><select data-field="status" data-id="${r.id}" data-brand="${r.brand}">${STATUS.map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')}</select></td><td>${isClosed(r)?'Sí':'No'}</td><td><input type="date" value="${r.closeDate}" data-field="closeDate" data-id="${r.id}" data-brand="${r.brand}" /></td><td><input value="${escAttr(r.reason)}" placeholder="Motivo" data-field="reason" data-id="${r.id}" data-brand="${r.brand}" /></td><td><input class="action-input" value="${escAttr(r.nextAction)}" placeholder="Próxima acción" data-field="nextAction" data-id="${r.id}" data-brand="${r.brand}" /></td><td>${daysOpen(r)??'—'}</td><td><button class="save" data-save="${r.id}" data-brand="${r.brand}">Guardar</button></td></tr>`).join('')||`<tr><td colspan="14" class="small">No hay casos disponibles.</td></tr>`;document.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>saveCase(b.dataset.id,b.dataset.brand));}
-async function saveCase(id,brand){const button=document.querySelector(`[data-save="${CSS.escape(id)}"][data-brand="${brand}"]`),inputs=[...document.querySelectorAll(`[data-id="${CSS.escape(id)}"][data-brand="${brand}"]`)],changes=Object.fromEntries(inputs.map(x=>[x.dataset.field,x.value]));const r=rows.find(x=>x.id===id&&x.brand===brand);if(!r||!dbs[brand]){showToast('Firebase aún no está listo para guardar.','error');return}if(changes.status==='Cerrada / aceptada'&&!changes.closeDate)changes.closeDate=isoToday();button.disabled=true;button.textContent='Guardando…';try{await updateDoc(doc(dbs[brand],r.collection,id),{status1:changes.status,motivo:changes.reason.trim(),fechaCierre:changes.closeDate,proximaAccion:changes.nextAction.trim()});Object.assign(r,changes);showToast(`Caso ${r.folio} actualizado.`);filterRows()}catch(e){showToast('No se pudo guardar. Verifique permisos de Firebase.','error');console.error(e)}finally{button.disabled=false;button.textContent='Guardar'}}
-function render(){renderKpis();renderComparison();renderWeights();renderInsights();renderKams();renderGoals();renderCases();}
-function fillFilters(){const add=(id,vals)=>{const el=$(id),current=el.value;[...new Set(vals.filter(Boolean))].sort().forEach(v=>{if(![...el.options].some(o=>o.value===v))el.add(new Option(v,v))});el.value=current};add('#kamFilter',rows.map(r=>r.kam));add('#statusFilter',STATUS);add('#siteFilter',rows.map(r=>r.site));}
-async function initFirebase(){try{const {firebaseProjects}=await import('./firebase-config.js');for(const [key,config] of Object.entries(firebaseProjects)){if(!config?.projectId)continue;const brand=key.toUpperCase(),db=getFirestore(initializeApp(config,`${key}CommandCenter`));dbs[brand]=db;onSnapshot(collection(db,'cotizaciones'),snap=>{rows=rows.filter(r=>r.brand!==brand).concat(snap.docs.map(d=>mapDoc(d,brand)));fillFilters();filterRows();$('#connectionState').textContent='Firebase en tiempo real';$('.pulse').classList.add('live');$('#lastCut').textContent=`Último corte ${new Date().toLocaleString('es-MX')}`},err=>{console.error(err);$('#connectionState').textContent='Conexión sin autorización';});}if(!Object.keys(dbs).length)throw new Error('Config vacía')}catch(e){console.info('Config Firebase pendiente',e);$('#connectionState').textContent='Configura Firebase para cargar datos';render();}}
-function saveGoals(){localStorage.setItem(goalStorageKey(activeGoalKey),JSON.stringify(goals))}
-function csvGoals(file){const reader=new FileReader();reader.onload=()=>{const data=reader.result.split(/\r?\n/).slice(1).map(l=>l.split(',')).filter(x=>x.length>=2).map(x=>({kam:x[0].replace(/^"|"$/g,'').trim(),value:Number(x[1].replace(/[^\d.]/g,''))})).filter(x=>x.kam&&x.value>=0);goals=data;saveGoals();renderGoals();showToast(`${data.length} meta(s) importada(s) para ${goalPeriod()}.`)};reader.readAsText(file)}
-async function exportCEO(){if(!filtered.length){alert('No hay datos para exportar. Conecte Firebase o ajuste los filtros.');return}const XLSX=await import('https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs');const m=metrics(filtered);const summary=[['INNVIDA | REPORTE CEO'],['Periodo',`${$('#fromDate').value||'Inicio'} a ${$('#toDate').value||'Hoy'}`],[],['Indicador','Valor'],['Valor total cotizado',m.total],['Cierre confirmado',m.closed],['Pipeline abierto',m.open],['Cierre estimado ponderado',m.estimate],['Médicos únicos',uniqueDoctors(filtered).size],['Médicos nuevos',newDoctors().length],['Cotizaciones canceladas',m.cancelled],['Valor cancelado',m.cancelledValue],['Canceladas alto valor',m.highValueCancelled],['Valor cancelado alto valor',m.highValueCancelledValue],['Tasa de conversión',m.conversion],['Ticket promedio',m.ticket],['Casos en riesgo',m.risk],['Casos sin seguimiento',m.noFollow]];const ws=XLSX.utils.aoa_to_sheet(summary);ws['!cols']=[{wch:33},{wch:22}];XLSX.utils.book_append_sheet(book,ws,'Resumen ejecutivo');const kamSummary=Object.entries(groupBy(filtered,r=>r.kam||'Sin KAM')).map(([kam,list])=>{const km=metrics(list),reason=cancellationReasonSummary(list);return {KAM:kam,Cotizaciones:km.count,Cotizado:km.total,Cerrado:km.closed,Estimado:km.estimate,'Conversión':km.conversion,'Pipeline abierto':km.open,'Cotizaciones cerradas':list.filter(isClosed).length,Canceladas:km.cancelled,'Médicos únicos':uniqueDoctors(list).size,'Motivo principal':km.cancelled?(reason.common?.label||'Sin motivo documentado'):'—'}}).sort((a,b)=>b.Estimado-a.Estimado);const kamSheet=XLSX.utils.json_to_sheet(kamSummary);kamSheet['!cols']=[{wch:28},{wch:14},{wch:16},{wch:16},{wch:16},{wch:13},{wch:18},{wch:22},{wch:14},{wch:17},{wch:42}];XLSX.utils.book_append_sheet(book,kamSheet,'Desempeño por KAM');const sharedDoctors=Object.entries(groupBy(filtered,r=>doctorIdentity(r.doctor))).filter(([id])=>id).map(([,list])=>{const kams=[...new Set(list.map(r=>r.kam||'Sin KAM'))].sort();return {Médico:String(list[0].doctor).trim(),KAMs:kams.join(', '),'KAMs distintos':kams.length,Cotizaciones:list.length,Cotizado:sum(list,r=>r.total),'Cotizaciones cerradas':list.filter(isClosed).length,Canceladas:list.filter(r=>r.status==='Cancelada').length,'Revisión sugerida':'Validar asignación y contexto comercial'}}).filter(row=>row['KAMs distintos']>1).sort((a,b)=>b['KAMs distintos']-a['KAMs distintos']||b.Cotizado-a.Cotizado);const sharedSheet=sharedDoctors.length?XLSX.utils.json_to_sheet(sharedDoctors):XLSX.utils.aoa_to_sheet([['Médicos compartidos'],['No hay médicos cotizados por más de un KAM bajo los filtros actuales.']]);sharedSheet['!cols']=[{wch:34},{wch:48},{wch:16},{wch:14},{wch:16},{wch:22},{wch:14},{wch:42}];XLSX.utils.book_append_sheet(book,sharedSheet,'Médicos compartidos');Object.entries(groupBy(filtered,r=>r.kam||'Sin KAM')).forEach(([kam,list])=>{const sheet=XLSX.utils.json_to_sheet(list.map(exportRow));XLSX.utils.book_append_sheet(book,sheet,safeSheet(kam))});const insights=[...document.querySelectorAll('.insight')].map(i=>({Tipo:i.querySelector('.tag').textContent,Hallazgo:i.querySelector('h3').textContent,Acción:i.querySelector('p').textContent}));XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(insights),'Hallazgos y prioridades');XLSX.writeFile(book,`INNVIDA_Reporte_CEO_${new Date().toISOString().slice(0,10)}.xlsx`)}
-function exportRow(r){return {'Fecha emisión':r.date,Folio:r.folio,KAM:r.kam,Médico:r.doctor,Paciente:r.patient,Marca:r.brand,Cotización:r.total,Estatus:r.status,'¿Se cerró?':isClosed(r)?'Sí':'No','Fecha cierre':r.closeDate,'Motivo no cierre':r.reason,'Próxima acción':r.nextAction,'Días abiertos':daysOpen(r),Aseguradora:r.insurer,Sede:r.site,'Estatus aplicación':r.status}}
-function safeSheet(s){return (s||'Sin KAM').replace(/[\\/*?:\[\]]/g,'').slice(0,31)||'Sin KAM'}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}function escAttr(s){return esc(s).replace(/`/g,'&#096;')}
-document.querySelectorAll('.filters input,.filters select').forEach(e=>e.addEventListener('input',filterRows));$('#clearFilters').onclick=()=>{document.querySelectorAll('.filters input').forEach(i=>i.value='');document.querySelectorAll('.filters select').forEach(i=>i.value='');filterRows()};$('#exportBtn').onclick=exportCEO;$('#addGoal').onclick=()=>$('#goalDialog').showModal();$('#saveGoal').onclick=()=>{const kam=$('#goalKam').value.trim(),value=Number($('#goalValue').value);if(kam&&Number.isFinite(value)){goals=[...goals.filter(g=>norm(g.kam)!==norm(kam)),{kam,value}];saveGoals();renderGoals();showToast(`Meta de ${kam} guardada para ${goalPeriod()}.`)}};$('#importGoals').onclick=()=>$('#goalFile').click();$('#goalFile').onchange=e=>e.target.files[0]&&csvGoals(e.target.files[0]);$('#weightToggle').onclick=()=>alert('Los pesos se documentan en main.js. Para hacerlos administrables en producción, muévalos a una colección protegida de configuración con permisos de administrador.');document.querySelectorAll('[data-scroll]').forEach(b=>b.onclick=()=>document.getElementById(b.dataset.scroll).scrollIntoView({behavior:'smooth'}));syncGoalPeriod();render();initFirebase();
+
+function syncGoalPeriod(){
+  const next=goalKey();
+  if(next!==activeGoalKey){
+    activeGoalKey=next;
+    goals=JSON.parse(localStorage.getItem(goalStorageKey(next))||"[]");
+  }
+  const label=`Metas de ${goalPeriod()}`;
+  $("#goalsTitle").textContent=label;
+  $("#goalPeriodHeader").textContent=`Meta ${goalPeriod()}`;
+  $("#goalDialogPeriod").textContent=`Meta ${goalPeriod()}`;
+}
+
+function showToast(message,kind="success"){
+  const toast=$("#toast");
+  toast.textContent=message;
+  toast.className=`toast show ${kind}`;
+  clearTimeout(showToast.timer);
+  showToast.timer=setTimeout(()=>toast.className="toast",3600);
+}
+
+function mapDoc(snap,brand){
+  const d=snap.data();
+  const phone=d.telefono||"";
+  const site=brand==="SANARE"
+    ?({"722 197 08 36":"Toluca","55 5255 8403":"Narvarte"}[phone.trim()]||"")
+    :"";
+
+  return {
+    id:snap.id,
+    brand,
+    folio:d.folio||"—",
+    date:d.fechaEmision||"",
+    closeDate:d.fechaCierre||"",
+    patient:d.paciente||"",
+    doctor:d.medico||"",
+    kam:d.kam||"",
+    insurer:d.aseguradora||"",
+    site,
+    total:Number(d.total)||0,
+    status:canonicalStatus(d.status1),
+    status2:d.status2||"",
+    reason:firstValue(d,REASON_FIELDS),
+    nextAction:d.proximaAccion||d.seguimiento||"",
+    items:brand==="NOMAD"?(d.pruebas||[]):(d.servicios||[]),
+    collection:"cotizaciones"
+  };
+}
+
+function isClosed(r){return r.status==="Cerrada / aceptada"}
+function isLost(r){return ["Perdida / rechazada","Cancelada"].includes(r.status)}
+
+function daysOpen(r){
+  const d=validDate(r.date);
+  return d?Math.max(0,Math.floor((Date.now()-d)/86400000)):null;
+}
+
+function risk(r){
+  if(isClosed(r)||isLost(r))return "low";
+  const days=daysOpen(r)||0;
+  if(r.status==="Sin seguimiento"||days>30)return "high";
+  if(days>14||r.status==="Cotización enviada")return "medium";
+  return "low";
+}
+
+function estimated(r){
+  return r.total*(WEIGHTS[r.status]??.15);
+}
+
+function doctorIdentity(name){
+  return keyNorm(name);
+}
+
+function uniqueDoctors(list){
+  const doctors=new Map();
+
+  list.forEach(r=>{
+    const id=doctorIdentity(r.doctor);
+    if(id&&!doctors.has(id))doctors.set(id,String(r.doctor).trim());
+  });
+
+  return doctors;
+}
+
+function normalizedReason(reason){
+  const label=String(reason||"").trim();
+  return {
+    key:label?label.toLocaleLowerCase("es-MX"):"__missing__",
+    label:label||"No reason recorded."
+  };
+}
+
+function cancellationReasonSummary(list){
+  const cancelled=list.filter(r=>r.status==="Cancelada");
+  const groups=new Map();
+
+  cancelled.forEach(r=>{
+    const reason=normalizedReason(r.reason);
+    const entry=groups.get(reason.key)||{label:reason.label,count:0};
+    entry.count++;
+    groups.set(reason.key,entry);
+  });
+
+  const missing=groups.get("__missing__")?.count||0;
+
+  const common=[...groups.entries()]
+    .filter(([key])=>key!=="__missing__")
+    .map(([,entry])=>entry)
+    .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,"es"))
+    .at(0);
+
+  return {count:cancelled.length,missing,common};
+}
+
+function scopedRowsForDoctorHistory(){
+  const brand=$("#brandFilter").value;
+  const kam=$("#kamFilter").value;
+  const site=$("#siteFilter").value;
+
+  return rows.filter(r=>
+    (!brand||r.brand===brand)&&
+    (!kam||r.kam===kam)&&
+    (!site||r.site===site)
+  );
+}
+
+function newDoctors(){
+  const from=$("#fromDate").value;
+  const to=$("#toDate").value;
+  const history=scopedRowsForDoctorHistory();
+  const firstQuote=new Map();
+
+  history.forEach(r=>{
+    const id=doctorIdentity(r.doctor);
+    const date=validDate(r.date);
+
+    if(!id||!date)return;
+
+    const current=firstQuote.get(id);
+    if(!current||date<current.date){
+      firstQuote.set(id,{date,name:String(r.doctor).trim()});
+    }
+  });
+
+  const visible=uniqueDoctors(filtered);
+
+  return [...visible]
+    .filter(([id])=>{
+      const first=firstQuote.get(id);
+      if(!first)return false;
+
+      const date=first.date.toISOString().slice(0,10);
+      return (!from||date>=from)&&(!to||date<=to);
+    })
+    .map(([id,name])=>({id,name,firstDate:firstQuote.get(id).date}))
+    .sort((a,b)=>a.name.localeCompare(b.name,"es"));
+}
+
+function filterRows(){
+  const from=$("#fromDate").value;
+  const to=$("#toDate").value;
+  const brand=$("#brandFilter").value;
+  const kam=$("#kamFilter").value;
+  const doctor=norm($("#doctorFilter").value);
+  const status=$("#statusFilter").value;
+  const insurer=norm($("#insurerFilter").value);
+  const site=$("#siteFilter").value;
+
+  filtered=rows.filter(r=>
+    (!from||r.date>=from)&&
+    (!to||r.date<=to)&&
+    (!brand||r.brand===brand)&&
+    (!kam||r.kam===kam)&&
+    (!doctor||norm(r.doctor).includes(doctor))&&
+    (!status||r.status===status)&&
+    (!insurer||norm(r.insurer).includes(insurer))&&
+    (!site||r.site===site)
+  );
+
+  syncGoalPeriod();
+  render();
+}
+
+function metrics(list){
+  const active=list.filter(r=>!isLost(r));
+  const closed=list.filter(isClosed);
+  const open=list.filter(r=>!isClosed(r)&&!isLost(r));
+  const cancelled=list.filter(r=>r.status==="Cancelada");
+  const highValueCancelled=cancelled.filter(r=>r.total>=HIGH_VALUE_THRESHOLD);
+
+  return {
+    total:sum(list,r=>r.total),
+    closed:sum(closed,r=>r.total),
+    open:sum(open,r=>r.total),
+    cancelled:cancelled.length,
+    cancelledValue:sum(cancelled,r=>r.total),
+    highValueCancelled:highValueCancelled.length,
+    highValueCancelledValue:sum(highValueCancelled,r=>r.total),
+    estimate:sum(active,estimated),
+    count:list.length,
+    conversion:list.length?closed.length/list.length:0,
+    ticket:list.length?sum(list,r=>r.total)/list.length:0,
+    risk:open.filter(r=>risk(r)==="high").length,
+    noFollow:open.filter(r=>r.status==="Sin seguimiento").length,
+    active
+  };
+}
+
+function renderKpis(){
+  const m=metrics(filtered);
+  const doctors=uniqueDoctors(filtered).size;
+  const newDoctorCount=newDoctors().length;
+
+  const cards=[
+    ["Valor total cotizado",mxn.format(m.total),`${m.count} cotizaciones`,""],
+    ["Cierre confirmado",mxn.format(m.closed),`${(m.conversion*100).toFixed(1)}% de conversión`,""],
+    ["Pipeline abierto",mxn.format(m.open),`${m.risk} caso(s) de alto riesgo`,"warning"],
+    ["Cierre estimado ponderado",mxn.format(m.estimate),"Solo oportunidades no perdidas ni canceladas",""],
+    ["Médicos únicos",doctors,`${newDoctorCount} médico(s) nuevo(s) en el periodo`,""],
+    ["Cotizaciones canceladas",m.cancelled,m.cancelled?`${mxn.format(m.cancelledValue)} descartado`:"Sin cancelaciones","danger"],
+    ["Canceladas alto valor",m.highValueCancelled,m.highValueCancelled?`${mxn.format(m.highValueCancelledValue)} · desde ${mxn.format(HIGH_VALUE_THRESHOLD)}`:`Desde ${mxn.format(HIGH_VALUE_THRESHOLD)}`,"danger"],
+    ["Casos sin seguimiento",m.noFollow,"Pendientes de una próxima acción","danger"]
+  ];
+
+  $("#kpis").innerHTML=cards.map(c=>`<article class="kpi ${c[3]}"><label>${c[0]}</label><strong>${c[1]}</strong><small>${c[2]}</small></article>`).join("");
+}
+
+function renderComparison(){
+  const by=b=>metrics(filtered.filter(r=>r.brand===b));
+  const a=by("SANARE");
+  const b=by("NOMAD");
+  const max=Math.max(a.total,b.total,1);
+
+  $("#brandComparison").innerHTML=[
+    ["Sanaré",a],
+    ["Nomad",b]
+  ].map(([name,m])=>`
+    <div class="brand-row">
+      <strong>${name}</strong>
+      <div class="bar"><i style="width:${m.total/max*100}%"></i></div>
+      <span class="number">${mxn.format(m.total)}</span>
+    </div>
+    <div class="small" style="margin:-12px 0 0 100px">
+      Cerrado ${mxn.format(m.closed)} · Estimado ${mxn.format(m.estimate)} · ${m.count} casos
+    </div>
+  `).join("");
+}
+
+function renderWeights(){
+  $("#weights").innerHTML=Object.entries(WEIGHTS).map(([s,w])=>`<div class="weight">${s}<strong>${w*100}%</strong></div>`).join("");
+}
+
+function insight(tag,title,body){
+  return `<article class="insight"><span class="tag">${tag}</span><h3>${title}</h3><p>${body}</p></article>`;
+}
+
+function renderInsights(){
+  const open=filtered.filter(r=>!isClosed(r)&&!isLost(r));
+  const high=[...open].filter(r=>risk(r)==="high"&&!r.nextAction).sort((a,b)=>b.total-a.total).slice(0,3);
+  const cancelledHigh=[...filtered].filter(r=>r.status==="Cancelada"&&r.total>=HIGH_VALUE_THRESHOLD).sort((a,b)=>b.total-a.total).slice(0,3);
+  const cancellationReasons=cancellationReasonSummary(filtered);
+  const byKam=groupBy(open,r=>r.kam||"Sin KAM");
+  const kamRisk=Object.entries(byKam).map(([k,v])=>[k,sum(v.filter(x=>risk(x)==="high"),x=>x.total)]).sort((a,b)=>b[1]-a[1])[0];
+  const repeat=Object.entries(groupBy(filtered,r=>doctorIdentity(r.doctor)||"__missing__")).filter(([key])=>key!=="__missing__").filter(([,v])=>v.length>1).sort((a,b)=>sum(b[1],x=>x.total)-sum(a[1],x=>x.total))[0];
+  const newDoctorList=newDoctors();
+  const noKam=filtered.filter(r=>!r.kam);
+  const stuck=open.filter(r=>(daysOpen(r)||0)>30);
+  const cards=[];
+
+  if(high.length){
+    cards.push(insight(
+      "Rescate prioritario",
+      `${high.length} caso(s) de alto riesgo sin siguiente acción`,
+      `${high.map(r=>`${r.folio} (${mxn.format(r.total)})`).join(", ")}. Pedir al KAM fecha, responsable y siguiente paso hoy.`
+    ));
+  }
+
+  if(cancelledHigh.length){
+    cards.push(insight(
+      "Cancelaciones prioritarias",
+      `${cancelledHigh.length} cancelación(es) de alto valor`,
+      `${cancelledHigh.map(r=>`${r.folio} (${mxn.format(r.total)})`).join(", ")}. Ordenadas por monto; revisar causa y posibilidad de recuperación.`
+    ));
+  }
+
+  if(cancellationReasons.count){
+    const common=cancellationReasons.common;
+    const percentage=common?(common.count/cancellationReasons.count*100).toFixed(1):0;
+
+    cards.push(insight(
+      "Motivo de cancelación",
+      common?`${common.label}: ${common.count} caso(s), ${percentage}% de canceladas`:"No hay motivo documentado en las cancelaciones",
+      `${cancellationReasons.missing} cancelación(es) sin motivo documentado. El motivo mostrado es el más frecuente tras normalizar espacios y mayúsculas.`
+    ));
+  }
+
+  if(kamRisk?.[1]){
+    cards.push(insight(
+      "Riesgo por responsable",
+      `${kamRisk[0]} concentra ${mxn.format(kamRisk[1])} en riesgo`,
+      "Solicitar plan de rescate y fecha de decisión por cada caso de riesgo."
+    ));
+  }
+
+  if(repeat){
+    cards.push(insight(
+      "Médico recurrente",
+      `${repeat[1][0].doctor.trim()} tiene ${repeat[1].length} cotizaciones`,
+      `${mxn.format(sum(repeat[1],r=>r.total))} cotizado. La identidad del médico se normaliza para no duplicar variantes de nombre.`
+    ));
+  }
+
+  if(newDoctorList.length){
+    cards.push(insight(
+      "Médicos nuevos",
+      `${newDoctorList.length} médico(s) único(s) nuevo(s)`,
+      `${newDoctorList.slice(0,5).map(d=>d.name).join(", ")}${newDoctorList.length>5?"…":""}. Se usa la primera cotización del historial cargado con los filtros de marca, KAM y sede.`
+    ));
+  }
+
+  if(noKam.length){
+    cards.push(insight(
+      "Asignación",
+      `${noKam.length} cotización(es) sin KAM asignado`,
+      "Asignar propietario hoy: estas oportunidades no tienen responsable operativo."
+    ));
+  }
+
+  if(stuck.length){
+    cards.push(insight(
+      "Antigüedad",
+      `${stuck.length} caso(s) abiertos más de 30 días`,
+      "Revisar viabilidad: rescatar, actualizar estatus o cerrar aprendizaje."
+    ));
+  }
+
+  $("#priorityCount").textContent=`${cards.length} prioridades`;
+  $("#insights").innerHTML=cards.length
+    ?cards.join("")
+    :insight("Sin señal crítica","No hay prioridades bajo los filtros actuales","Al conectar datos aparecerán hallazgos accionables; ningún dato se ha inventado.");
+}
+
+function groupBy(list,f){
+  return list.reduce((o,x)=>{
+    const k=f(x);
+    (o[k]??=[]).push(x);
+    return o;
+  },{});
+}
+
+function renderKams(){
+  const groups=groupBy(filtered,r=>r.kam||"Sin KAM");
+
+  const kams=Object.entries(groups).map(([name,list])=>({
+    name,
+    list,
+    m:metrics(list),
+    closedQuotes:list.filter(isClosed).length,
+    doctors:uniqueDoctors(list).size,
+    reason:cancellationReasonSummary(list)
+  })).sort((a,b)=>b.m.estimate-a.m.estimate);
+
+  $("#kamTable").innerHTML=kams.length
+    ?kams.map((x,i)=>{
+      const reason=x.m.cancelled
+        ?(x.reason.common?x.reason.common.label:"Sin motivo documentado")
+        :"—";
+
+      return `<tr class="clickable" data-kam="${esc(x.name)}">
+        <td>${i+1}</td>
+        <td><strong>${esc(x.name)}</strong></td>
+        <td>${x.m.count}</td>
+        <td class="number">${mxn.format(x.m.total)}</td>
+        <td class="number">${mxn.format(x.m.closed)}</td>
+        <td class="number">${mxn.format(x.m.estimate)}</td>
+        <td>${(x.m.conversion*100).toFixed(0)}%</td>
+        <td class="number">${mxn.format(x.m.open)}</td>
+        <td>${x.closedQuotes}</td>
+        <td>${x.m.cancelled}</td>
+        <td>${x.doctors}</td>
+        <td>${esc(reason)}</td>
+      </tr>`;
+    }).join("")
+    :`<tr><td colspan="12" class="small">No hay datos para los filtros seleccionados.</td></tr>`;
+
+  document.querySelectorAll("[data-kam]").forEach(el=>el.onclick=()=>{
+    $("#kamFilter").value=el.dataset.kam;
+    filterRows();
+    document.querySelector(".case-panel").scrollIntoView({behavior:"smooth"});
+  });
+}
+
+function renderGoals(){
+  const table=$("#goalsTable");
+  const body=table.querySelector("tbody");
+
+  if(!goals.length){
+    $("#goalsEmpty").hidden=false;
+    table.hidden=true;
+    return;
+  }
+
+  $("#goalsEmpty").hidden=true;
+  table.hidden=false;
+
+  body.innerHTML=goals.map((g,i)=>{
+    const m=metrics(filtered.filter(r=>norm(r.kam)===norm(g.kam)));
+    const gap=g.value-m.estimate;
+
+    return `<tr>
+      <td><strong>${esc(g.kam)}</strong></td>
+      <td class="number">${mxn.format(g.value)}</td>
+      <td class="number">${mxn.format(m.closed)}</td>
+      <td class="number">${mxn.format(m.estimate)}</td>
+      <td class="number">${mxn.format(gap)}</td>
+      <td>${g.value?((m.closed/g.value)*100).toFixed(1):0}%</td>
+      <td><button class="text-button delete-goal" data-i="${i}">Eliminar</button></td>
+    </tr>`;
+  }).join("");
+
+  document.querySelectorAll(".delete-goal").forEach(b=>b.onclick=()=>{
+    goals.splice(b.dataset.i,1);
+    saveGoals();
+    renderGoals();
+  });
+}
+
+function renderCases(){
+  $("#caseCount").textContent=`${filtered.length} casos`;
+
+  $("#caseTable").innerHTML=[...filtered]
+    .sort((a,b)=>({high:0,medium:1,low:2}[risk(a)]-{high:0,medium:1,low:2}[risk(b)]))
+    .map(r=>`<tr>
+      <td><span class="risk ${risk(r)}">${risk(r)==="high"?"ALTO":risk(r)==="medium"?"MEDIO":"BAJO"}</span></td>
+      <td>${esc(r.date||"—")}</td>
+      <td>${esc(r.folio)}</td>
+      <td>${esc(r.kam||"Sin asignar")}</td>
+      <td><strong>${esc(r.doctor||"—")}</strong><br><span class="small">${esc(r.patient||"—")}</span></td>
+      <td>${r.brand}</td>
+      <td class="number">${mxn.format(r.total)}</td>
+      <td><select data-field="status" data-id="${r.id}" data-brand="${r.brand}">${STATUS.map(s=>`<option ${s===r.status?"selected":""}>${s}</option>`).join("")}</select></td>
+      <td>${isClosed(r)?"Sí":"No"}</td>
+      <td><input type="date" value="${r.closeDate}" data-field="closeDate" data-id="${r.id}" data-brand="${r.brand}" /></td>
+      <td><input value="${escAttr(r.reason)}" placeholder="Motivo" data-field="reason" data-id="${r.id}" data-brand="${r.brand}" /></td>
+      <td><input class="action-input" value="${escAttr(r.nextAction)}" placeholder="Próxima acción" data-field="nextAction" data-id="${r.id}" data-brand="${r.brand}" /></td>
+      <td>${daysOpen(r)??"—"}</td>
+      <td><button class="save" data-save="${r.id}" data-brand="${r.brand}">Guardar</button></td>
+    </tr>`)
+    .join("")||`<tr><td colspan="14" class="small">No hay casos disponibles.</td></tr>`;
+
+  document.querySelectorAll("[data-save]").forEach(b=>b.onclick=()=>saveCase(b.dataset.id,b.dataset.brand));
+}
+
+async function saveCase(id,brand){
+  const button=document.querySelector(`[data-save="${CSS.escape(id)}"][data-brand="${brand}"]`);
+  const inputs=[...document.querySelectorAll(`[data-id="${CSS.escape(id)}"][data-brand="${brand}"]`)];
+  const changes=Object.fromEntries(inputs.map(x=>[x.dataset.field,x.value]));
+  const r=rows.find(x=>x.id===id&&x.brand===brand);
+
+  if(!r||!dbs[brand]){
+    showToast("Firebase aún no está listo para guardar.","error");
+    return;
+  }
+
+  if(changes.status==="Cerrada / aceptada"&&!changes.closeDate){
+    changes.closeDate=isoToday();
+  }
+
+  button.disabled=true;
+  button.textContent="Guardando…";
+
+  try{
+    await updateDoc(doc(dbs[brand],r.collection,id),{
+      status1:changes.status,
+      motivo:changes.reason.trim(),
+      fechaCierre:changes.closeDate,
+      proximaAccion:changes.nextAction.trim()
+    });
+
+    Object.assign(r,changes);
+    showToast(`Caso ${r.folio} actualizado.`);
+    filterRows();
+  }catch(e){
+    showToast("No se pudo guardar. Verifique permisos de Firebase.","error");
+    console.error(e);
+  }finally{
+    button.disabled=false;
+    button.textContent="Guardar";
+  }
+}
+
+function render(){
+  renderKpis();
+  renderComparison();
+  renderWeights();
+  renderInsights();
+  renderKams();
+  renderGoals();
+  renderCases();
+}
+
+function fillFilters(){
+  const add=(id,vals)=>{
+    const el=$(id);
+    const current=el.value;
+
+    [...new Set(vals.filter(Boolean))].sort().forEach(v=>{
+      if(![...el.options].some(o=>o.value===v)){
+        el.add(new Option(v,v));
+      }
+    });
+
+    el.value=current;
+  };
+
+  add("#kamFilter",rows.map(r=>r.kam));
+  add("#statusFilter",STATUS);
+  add("#siteFilter",rows.map(r=>r.site));
+}
+
+async function initFirebase(){
+  try{
+    const {firebaseProjects}=await import("./firebase-config.js");
+
+    for(const [key,config] of Object.entries(firebaseProjects)){
+      if(!config?.projectId)continue;
+
+      const brand=key.toUpperCase();
+      const db=getFirestore(initializeApp(config,`${key}CommandCenter`));
+      dbs[brand]=db;
+
+      onSnapshot(collection(db,"cotizaciones"),snap=>{
+        rows=rows.filter(r=>r.brand!==brand).concat(snap.docs.map(d=>mapDoc(d,brand)));
+        fillFilters();
+        filterRows();
+        $("#connectionState").textContent="Firebase en tiempo real";
+        $(".pulse").classList.add("live");
+        $("#lastCut").textContent=`Último corte ${new Date().toLocaleString("es-MX")}`;
+      },err=>{
+        console.error(err);
+        $("#connectionState").textContent="Conexión sin autorización";
+      });
+    }
+
+    if(!Object.keys(dbs).length)throw new Error("Config vacía");
+  }catch(e){
+    console.info("Config Firebase pendiente",e);
+    $("#connectionState").textContent="Configura Firebase para cargar datos";
+    render();
+  }
+}
+
+function saveGoals(){
+  localStorage.setItem(goalStorageKey(activeGoalKey),JSON.stringify(goals));
+}
+
+function csvGoals(file){
+  const reader=new FileReader();
+
+  reader.onload=()=>{
+    const data=reader.result
+      .split(/\r?\n/)
+      .slice(1)
+      .map(l=>l.split(","))
+      .filter(x=>x.length>=2)
+      .map(x=>({
+        kam:x[0].replace(/^"|"$/g,"").trim(),
+        value:Number(x[1].replace(/[^\d.]/g,""))
+      }))
+      .filter(x=>x.kam&&x.value>=0);
+
+    goals=data;
+    saveGoals();
+    renderGoals();
+    showToast(`${data.length} meta(s) importada(s) para ${goalPeriod()}.`);
+  };
+
+  reader.readAsText(file);
+}
+
+async function exportCEO(){
+  if(!filtered.length){
+    alert("No hay datos para exportar. Conecte Firebase o ajuste los filtros.");
+    return;
+  }
+
+  const XLSX=await import("https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs");
+  const m=metrics(filtered);
+
+  const summary=[
+    ["INNVIDA | REPORTE CEO"],
+    ["Periodo",`${$("#fromDate").value||"Inicio"} a ${$("#toDate").value||"Hoy"}`],
+    [],
+    ["Indicador","Valor"],
+    ["Valor total cotizado",m.total],
+    ["Cierre confirmado",m.closed],
+    ["Pipeline abierto",m.open],
+    ["Cierre estimado ponderado",m.estimate],
+    ["Médicos únicos",uniqueDoctors(filtered).size],
+    ["Médicos nuevos",newDoctors().length],
+    ["Cotizaciones canceladas",m.cancelled],
+    ["Valor cancelado",m.cancelledValue],
+    ["Canceladas alto valor",m.highValueCancelled],
+    ["Valor cancelado alto valor",m.highValueCancelledValue],
+    ["Tasa de conversión",m.conversion],
+    ["Ticket promedio",m.ticket],
+    ["Casos en riesgo",m.risk],
+    ["Casos sin seguimiento",m.noFollow]
+  ];
+
+  const book=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(summary);
+  ws["!cols"]=[{wch:33},{wch:22}];
+  XLSX.utils.book_append_sheet(book,ws,"Resumen ejecutivo");
+
+  const kamSummary=Object.entries(groupBy(filtered,r=>r.kam||"Sin KAM"))
+    .map(([kam,list])=>{
+      const km=metrics(list);
+      const reason=cancellationReasonSummary(list);
+
+      return {
+        KAM:kam,
+        Cotizaciones:km.count,
+        Cotizado:km.total,
+        Cerrado:km.closed,
+        Estimado:km.estimate,
+        "Conversión":km.conversion,
+        "Pipeline abierto":km.open,
+        "Cotizaciones cerradas":list.filter(isClosed).length,
+        Canceladas:km.cancelled,
+        "Médicos únicos":uniqueDoctors(list).size,
+        "Motivo principal":km.cancelled?(reason.common?.label||"Sin motivo documentado"):"—"
+      };
+    })
+    .sort((a,b)=>b.Estimado-a.Estimado);
+
+  const kamSheet=XLSX.utils.json_to_sheet(kamSummary);
+  kamSheet["!cols"]=[
+    {wch:28},{wch:14},{wch:16},{wch:16},{wch:16},
+    {wch:13},{wch:18},{wch:22},{wch:14},{wch:17},{wch:42}
+  ];
+  XLSX.utils.book_append_sheet(book,kamSheet,"Desempeño por KAM");
+
+  const sharedDoctors=Object.entries(groupBy(filtered,r=>doctorIdentity(r.doctor)))
+    .filter(([id])=>id)
+    .map(([,list])=>{
+      const kams=[...new Set(list.map(r=>r.kam||"Sin KAM"))].sort();
+
+      return {
+        Médico:String(list[0].doctor).trim(),
+        KAMs:kams.join(", "),
+        "KAMs distintos":kams.length,
+        Cotizaciones:list.length,
+        Cotizado:sum(list,r=>r.total),
+        "Cotizaciones cerradas":list.filter(isClosed).length,
+        Canceladas:list.filter(r=>r.status==="Cancelada").length,
+        "Revisión sugerida":"Validar asignación y contexto comercial"
+      };
+    })
+    .filter(row=>row["KAMs distintos"]>1)
+    .sort((a,b)=>b["KAMs distintos"]-a["KAMs distintos"]||b.Cotizado-a.Cotizado);
+
+  const sharedSheet=sharedDoctors.length
+    ?XLSX.utils.json_to_sheet(sharedDoctors)
+    :XLSX.utils.aoa_to_sheet([
+      ["Médicos compartidos"],
+      ["No hay médicos cotizados por más de un KAM bajo los filtros actuales."]
+    ]);
+
+  sharedSheet["!cols"]=[
+    {wch:34},{wch:48},{wch:16},{wch:14},
+    {wch:16},{wch:22},{wch:14},{wch:42}
+  ];
+
+  XLSX.utils.book_append_sheet(book,sharedSheet,"Médicos compartidos");
+
+  Object.entries(groupBy(filtered,r=>r.kam||"Sin KAM")).forEach(([kam,list])=>{
+    const sheet=XLSX.utils.json_to_sheet(list.map(exportRow));
+    XLSX.utils.book_append_sheet(book,sheet,safeSheet(kam));
+  });
+
+  const insights=[...document.querySelectorAll(".insight")].map(i=>({
+    Tipo:i.querySelector(".tag").textContent,
+    Hallazgo:i.querySelector("h3").textContent,
+    Acción:i.querySelector("p").textContent
+  }));
+
+  XLSX.utils.book_append_sheet(
+    book,
+    XLSX.utils.json_to_sheet(insights),
+    "Hallazgos y prioridades"
+  );
+
+  XLSX.writeFile(
+    book,
+    `INNVIDA_Reporte_CEO_${new Date().toISOString().slice(0,10)}.xlsx`
+  );
+}
+
+function exportRow(r){
+  return {
+    "Fecha emisión":r.date,
+    Folio:r.folio,
+    KAM:r.kam,
+    Médico:r.doctor,
+    Paciente:r.patient,
+    Marca:r.brand,
+    Cotización:r.total,
+    Estatus:r.status,
+    "¿Se cerró?":isClosed(r)?"Sí":"No",
+    "Fecha cierre":r.closeDate,
+    "Motivo no cierre":r.reason,
+    "Próxima acción":r.nextAction,
+    "Días abiertos":daysOpen(r),
+    Aseguradora:r.insurer,
+    Sede:r.site,
+    "Estatus aplicación":r.status
+  };
+}
+
+function safeSheet(s){
+  return (s||"Sin KAM").replace(/[\\/*?:\[\]]/g,"").slice(0,31)||"Sin KAM";
+}
+
+function esc(s){
+  return String(s??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    '"':"&quot;",
+    "'":"&#039;"
+  }[c]));
+}
+
+function escAttr(s){
+  return esc(s).replace(/`/g,"&#096;");
+}
+
+document.querySelectorAll(".filters input,.filters select").forEach(e=>e.addEventListener("input",filterRows));
+
+$("#clearFilters").onclick=()=>{
+  document.querySelectorAll(".filters input").forEach(i=>i.value="");
+  document.querySelectorAll(".filters select").forEach(i=>i.value="");
+  filterRows();
+};
+
 $("#exportBtn").onclick=exportCEO;
+$("#addGoal").onclick=()=>$("#goalDialog").showModal();
+
+$("#saveGoal").onclick=()=>{
+  const kam=$("#goalKam").value.trim();
+  const value=Number($("#goalValue").value);
+
+  if(kam&&Number.isFinite(value)){
+    goals=[...goals.filter(g=>norm(g.kam)!==norm(kam)),{kam,value}];
+    saveGoals();
+    renderGoals();
+    showToast(`Meta de ${kam} guardada para ${goalPeriod()}.`);
+  }
+};
+
+$("#importGoals").onclick=()=>$("#goalFile").click();
+$("#goalFile").onchange=e=>e.target.files[0]&&csvGoals(e.target.files[0]);
+
+$("#weightToggle").onclick=()=>alert("Los pesos se documentan en main.js. Para hacerlos administrables en producción, muévalos a una colección protegida de configuración con permisos de administrador.");
+
+document.querySelectorAll("[data-scroll]").forEach(b=>b.onclick=()=>document.getElementById(b.dataset.scroll).scrollIntoView({behavior:"smooth"}));
+
+syncGoalPeriod();
+render();
+initFirebase();
