@@ -1,0 +1,1 @@
+{"name":"innvida-ceo-command-center","version":"1.0.0","private":true,"scripts":{"start":"npx serve .","check":"node --check main.js"}}
