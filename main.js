@@ -260,9 +260,14 @@ function csvGoals(file){
 }
 
 async function exportCEO(){
-  if(!filtered.length){alert('No hay datos para exportar. Conecte Firebase o ajuste los filtros.');return}
+  if(!filtered.length){
+    alert('No hay datos para exportar. Conecte Firebase o ajuste los filtros.');
+    return;
+  }
+
   const XLSX=await import('https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs');
   const m=metrics(filtered);
+
   const summary=[
     ['INNVIDA | REPORTE CEO'],
     ['Periodo',`${$('#fromDate').value||'Inicio'} a ${$('#toDate').value||'Hoy'}`],
@@ -283,16 +288,73 @@ async function exportCEO(){
     ['Casos en riesgo',m.risk],
     ['Casos sin seguimiento',m.noFollow]
   ];
-  const book=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(summary);
+
+  const book=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(summary);
   ws['!cols']=[{wch:33},{wch:22}];
   XLSX.utils.book_append_sheet(book,ws,'Resumen ejecutivo');
+
+  const kamSummary=Object.entries(groupBy(filtered,r=>r.kam||'Sin KAM'))
+    .map(([kam,list])=>{
+      const km=metrics(list);
+      const reason=cancellationReasonSummary(list);
+
+      return {
+        KAM:kam,
+        Cotizaciones:km.count,
+        Cotizado:km.total,
+        Cerrado:km.closed,
+        Estimado:km.estimate,
+        'Conversión':km.conversion,
+        'Pipeline abierto':km.open,
+        'En riesgo':km.risk,
+        Canceladas:km.cancelled,
+        'Médicos únicos':uniqueDoctors(list).size,
+        'Motivo principal':km.cancelled
+          ?(reason.common?.label||'Sin motivo documentado')
+          :'—'
+      };
+    })
+    .sort((a,b)=>b.Estimado-a.Estimado);
+
+  const kamSheet=XLSX.utils.json_to_sheet(kamSummary);
+  kamSheet['!cols']=[
+    {wch:28},
+    {wch:14},
+    {wch:16},
+    {wch:16},
+    {wch:16},
+    {wch:13},
+    {wch:18},
+    {wch:12},
+    {wch:14},
+    {wch:17},
+    {wch:42}
+  ];
+
+  XLSX.utils.book_append_sheet(book,kamSheet,'Desempeño por KAM');
+
   Object.entries(groupBy(filtered,r=>r.kam||'Sin KAM')).forEach(([kam,list])=>{
     const sheet=XLSX.utils.json_to_sheet(list.map(exportRow));
     XLSX.utils.book_append_sheet(book,sheet,safeSheet(kam));
   });
-  const insights=[...document.querySelectorAll('.insight')].map(i=>({Tipo:i.querySelector('.tag').textContent,Hallazgo:i.querySelector('h3').textContent,Acción:i.querySelector('p').textContent}));
-  XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(insights),'Hallazgos y prioridades');
-  XLSX.writeFile(book,`INNVIDA_Reporte_CEO_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+  const insights=[...document.querySelectorAll('.insight')].map(i=>({
+    Tipo:i.querySelector('.tag').textContent,
+    Hallazgo:i.querySelector('h3').textContent,
+    Acción:i.querySelector('p').textContent
+  }));
+
+  XLSX.utils.book_append_sheet(
+    book,
+    XLSX.utils.json_to_sheet(insights),
+    'Hallazgos y prioridades'
+  );
+
+  XLSX.writeFile(
+    book,
+    `INNVIDA_Reporte_CEO_${new Date().toISOString().slice(0,10)}.xlsx`
+  );
 }
 
 function exportRow(r){return {'Fecha emisión':r.date,Folio:r.folio,KAM:r.kam,Médico:r.doctor,Paciente:r.patient,Marca:r.brand,Cotización:r.total,Estatus:r.status,'¿Se cerró?':isClosed(r)?'Sí':'No','Fecha cierre':r.closeDate,'Motivo no cierre':r.reason,'Próxima acción':r.nextAction,'Días abiertos':daysOpen(r),'Nivel de riesgo':risk(r),Aseguradora:r.insurer,Sede:r.site,'Estatus aplicación':r.status2}}
