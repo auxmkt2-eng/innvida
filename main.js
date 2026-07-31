@@ -15,6 +15,8 @@ const STATUS_ALIASES={"sinseguimiento":"Sin seguimiento","cotizacionenviada":"Co
 const canonicalStatus=value=>STATUS_ALIASES[keyNorm(value)]||(value||"Sin seguimiento").toString().trim();
 // Variantes verificadas que corresponden al mismo KAM. Agregue aquí solo alias confirmados.
 const KAM_ALIASES={
+  "dayan":"DAYANA",
+  "dayana":"DAYANA",
   "enrique":"ENRIQUE MUÑOZ",
   "enriquemunoz":"ENRIQUE MUÑOZ",
   "josefrancisco":"JOSÉ FRANCISCO / CLAUDIA",
@@ -24,6 +26,7 @@ const KAM_ALIASES={
   "leonelcastillejos":"LEONEL CASTILLEJOS AVILÉS",
   "leonelcastillejosaviles":"LEONEL CASTILLEJOS AVILÉS",
   "leonelcatillejos":"LEONEL CASTILLEJOS AVILÉS",
+  "samantha":"SAMANTHA GUEVARA LEÓN",
   "samtha":"SAMANTHA GUEVARA LEÓN",
   "samthaguevaraleon":"SAMANTHA GUEVARA LEÓN",
   "samanthaguevaraleon":"SAMANTHA GUEVARA LEÓN",
