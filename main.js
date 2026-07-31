@@ -15,10 +15,17 @@ const STATUS_ALIASES={"sinseguimiento":"Sin seguimiento","cotizacionenviada":"Co
 const canonicalStatus=value=>STATUS_ALIASES[keyNorm(value)]||(value||"Sin seguimiento").toString().trim();
 // Variantes verificadas que corresponden al mismo KAM. Agregue aquí solo alias confirmados.
 const KAM_ALIASES={
-  "efrainicamarin":"EFRÁIN I. CAMARÍN SÁNCHEZ",
-  "efrainicamarinsanchez":"EFRÁIN I. CAMARÍN SÁNCHEZ",
-  "drefrainicamarin":"EFRÁIN I. CAMARÍN SÁNCHEZ",
-  "drefrainicamarinsanchez":"EFRÁIN I. CAMARÍN SÁNCHEZ"
+  "enrique":"ENRIQUE MUÑOZ",
+  "enriquemunoz":"ENRIQUE MUÑOZ",
+  "efrainicamarin":"EFRÁIN I. CAMARÍN",
+  "efrainicamarinsanchez":"EFRÁIN I. CAMARÍN",
+  "efrainicamarinhernandez":"EFRÁIN I. CAMARÍN",
+  "enfrainicamarin":"EFRÁIN I. CAMARÍN",
+  "enfrainicamarinsanchez":"EFRÁIN I. CAMARÍN",
+  "enfrainicamarinhernandez":"EFRÁIN I. CAMARÍN",
+  "drefrainicamarin":"EFRÁIN I. CAMARÍN",
+  "drefrainicamarinsanchez":"EFRÁIN I. CAMARÍN",
+  "drefrainicamarinhernandez":"EFRÁIN I. CAMARÍN"
 };
 function canonicalKam(value){const raw=String(value||"").trim();if(!raw)return "";const id=keyNorm(raw);if(KAM_ALIASES[id])return KAM_ALIASES[id];return raw.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g," ").trim().replace(/\s+/g," ").toLocaleUpperCase("es-MX")}
 function firstValue(data,names){const wanted=new Set(names.map(keyNorm));const entry=Object.entries(data).find(([key,value])=>wanted.has(keyNorm(key))&&value!==undefined&&value!==null&&String(value).trim()!=="");return entry?entry[1]:""}
