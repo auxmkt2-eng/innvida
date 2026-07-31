@@ -17,6 +17,19 @@ const canonicalStatus=value=>STATUS_ALIASES[keyNorm(value)]||(value||"Sin seguim
 const KAM_ALIASES={
   "enrique":"ENRIQUE MUÑOZ",
   "enriquemunoz":"ENRIQUE MUÑOZ",
+  "josefrancisco":"JOSÉ FRANCISCO / CLAUDIA",
+  "josefranciscoclaudia":"JOSÉ FRANCISCO / CLAUDIA",
+  "leo":"LEONEL CASTILLEJOS AVILÉS",
+  "leonel":"LEONEL CASTILLEJOS AVILÉS",
+  "leonelcastillejos":"LEONEL CASTILLEJOS AVILÉS",
+  "leonelcastillejosaviles":"LEONEL CASTILLEJOS AVILÉS",
+  "leonelcatillejos":"LEONEL CASTILLEJOS AVILÉS",
+  "samtha":"SAMANTHA GUEVARA LEÓN",
+  "samthaguevaraleon":"SAMANTHA GUEVARA LEÓN",
+  "samanthaguevaraleon":"SAMANTHA GUEVARA LEÓN",
+  "samnthaguevaraleon":"SAMANTHA GUEVARA LEÓN",
+  "berenice":"BERENICE ORDAZ NARANJO",
+  "bereniceordaznaranjo":"BERENICE ORDAZ NARANJO",
   "efrainicamarin":"EFRÁIN I. CAMARÍN",
   "efrainicamarinsanchez":"EFRÁIN I. CAMARÍN",
   "efrainicamarinhernandez":"EFRÁIN I. CAMARÍN",
@@ -27,7 +40,7 @@ const KAM_ALIASES={
   "drefrainicamarinsanchez":"EFRÁIN I. CAMARÍN",
   "drefrainicamarinhernandez":"EFRÁIN I. CAMARÍN"
 };
-function canonicalKam(value){const raw=String(value||"").trim();if(!raw)return "";const id=keyNorm(raw);if(KAM_ALIASES[id])return KAM_ALIASES[id];return raw.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g," ").trim().replace(/\s+/g," ").toLocaleUpperCase("es-MX")}
+function canonicalKam(value){const raw=String(value||"").trim();if(!raw)return "";const id=keyNorm(raw);if((id.includes("efrain")||id.includes("efrai")||id.includes("enfrain"))&&id.includes("camarin"))return "EFRÁIN I. CAMARÍN";if(KAM_ALIASES[id])return KAM_ALIASES[id];return raw.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g," ").trim().replace(/\s+/g," ").toLocaleUpperCase("es-MX")}
 function firstValue(data,names){const wanted=new Set(names.map(keyNorm));const entry=Object.entries(data).find(([key,value])=>wanted.has(keyNorm(key))&&value!==undefined&&value!==null&&String(value).trim()!=="");return entry?entry[1]:""}
 const validDate=v=>{if(!v)return null;const d=new Date(`${String(v).slice(0,10)}T12:00:00`);return Number.isNaN(d.valueOf())?null:d};
 const isoToday=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
