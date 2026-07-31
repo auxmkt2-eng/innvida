@@ -7,55 +7,241 @@
     <title>INNVIDA | CEO Command Center</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./operational.css" />
   </head>
   <body>
     <main class="shell">
       <header class="masthead">
-        <div class="brand"><span class="brand-mark">I</span><div><strong>INNVIDA</strong><small>CEO COMMAND CENTER</small></div></div>
-        <div class="cut"><span class="pulse"></span><span id="connectionState">Preparando conexión…</span><span class="divider"></span><span id="lastCut">Sin corte disponible</span></div>
-        <button id="exportBtn" class="button primary">Generar reporte CEO <span>→</span></button>
+        <div class="brand">
+          <span class="brand-mark">I</span>
+          <div><strong>INNVIDA</strong><small>CEO COMMAND CENTER</small></div>
+        </div>
+        <div class="connection">
+          <span class="pulse"></span><span id="connectionState">Conectando Firebase…</span>
+          <span class="divider">|</span><span id="lastCut">Sin corte</span>
+        </div>
+        <button id="exportBtn" class="button primary">Generar reporte CEO →</button>
       </header>
 
       <section class="hero">
-        <div><p class="eyebrow">Panorama comercial · Sanaré & Nomad</p><h1>Qué está avanzando,<br><em>qué necesita dirección.</em></h1></div>
-        <div class="hero-action"><p>Actualizado en tiempo real desde Firebase</p><button class="button quiet" data-scroll="followup">Ver prioridades ↓</button></div>
+        <div>
+          <p class="eyebrow">Panorama comercial · Sanaré &amp; Nomad</p>
+          <h1>Qué está avanzando,<br />qué necesita dirección.</h1>
+        </div>
+        <div class="hero-note">
+          <p>Actualizado en tiempo real desde Firebase</p>
+          <button class="text-button" data-scroll="followup">Ver prioridades ↓</button>
+        </div>
       </section>
 
-      <section class="filters" aria-label="Filtros del tablero">
-        <label>Periodo <span><input id="fromDate" type="date" /><b>—</b><input id="toDate" type="date" /></span></label>
-        <label>Marca <select id="brandFilter"><option value="">Todas las marcas</option><option>SANARE</option><option>NOMAD</option></select></label>
-        <label>KAM <select id="kamFilter"><option value="">Todos los KAM</option></select></label>
-        <label>Médico <input id="doctorFilter" placeholder="Buscar médico" /></label>
-        <label>Estatus <select id="statusFilter"><option value="">Todos los estatus</option></select></label>
-        <label>Aseguradora <input id="insurerFilter" placeholder="Buscar aseguradora" /></label>
-        <label>Sede <select id="siteFilter"><option value="">Todas las sedes</option></select></label>
+      <section class="filters">
+        <label>Periodo
+          <span class="date-range">
+            <input id="fromDate" type="date" />
+            <b>—</b>
+            <input id="toDate" type="date" />
+          </span>
+        </label>
+        <label>Marca
+          <select id="brandFilter"><option value="">Todas las marcas</option><option value="SANARE">Sanaré</option><option value="NOMAD">Nomad</option></select>
+        </label>
+        <label>KAM
+          <select id="kamFilter"><option value="">Todos los KAM</option></select>
+        </label>
+        <label>Médico
+          <input id="doctorFilter" placeholder="Buscar médico" />
+        </label>
+        <label>Estatus
+          <select id="statusFilter"><option value="">Todos los estatus</option></select>
+        </label>
+        <label>Aseguradora
+          <input id="insurerFilter" placeholder="Buscar aseguradora" />
+        </label>
+        <label>Sede
+          <select id="siteFilter"><option value="">Todas las sedes</option></select>
+        </label>
         <button id="clearFilters" class="text-button">Limpiar filtros</button>
       </section>
 
       <section class="kpi-grid" id="kpis"></section>
 
       <section class="two-col">
-        <article class="panel brand-panel"><div class="panel-heading"><div><p class="eyebrow">Origen del pipeline</p><h2>Sanaré vs. Nomad</h2></div><span class="note">Por monto cotizado</span></div><div id="brandComparison" class="comparison"></div></article>
-        <article class="panel methodology"><div class="panel-heading"><div><p class="eyebrow">Estimado de cierre</p><h2>Metodología ponderada</h2></div><button id="weightToggle" class="text-button">Editar pesos</button></div><div id="weights" class="weights"></div><p class="small">El estimado no sustituye el cierre real. Es una señal de capacidad probable según el estatus actual.</p></article>
+        <article class="panel brand-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Origen del pipeline</p>
+              <h2>Sanaré vs. Nomad</h2>
+            </div>
+            <span class="note">Por monto cotizado</span>
+          </div>
+          <div id="brandComparison" class="comparison"></div>
+        </article>
+
+        <article class="panel methodology">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Estimado de cierre</p>
+              <h2>Metodología ponderada</h2>
+            </div>
+            <button id="weightToggle" class="text-button">Editar pesos</button>
+          </div>
+          <div id="weights" class="weights"></div>
+          <p class="small">El estimado no sustituye el cierre real. Es una señal de capacidad probable según el estatus actual.</p>
+        </article>
       </section>
 
-      <section id="followup" class="panel priority-panel" style="display:none!important" hidden><div class="panel-heading"><div><p class="eyebrow">Sherlock Mode</p><h2>Acciones que pedir esta semana</h2></div><span id="priorityCount" class="count-pill">0 prioridades</span></div><div id="insights" class="insights"></div></section>
+      <section id="followup" class="panel priority-panel" style="display:none!important" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Sherlock Mode</p>
+            <h2>Acciones que pedir esta semana</h2>
+          </div>
+          <span id="priorityCount" class="count-pill">0 prioridades</span>
+        </div>
+        <div id="insights" class="insights"></div>
+      </section>
 
-      <section class="goals-section"><div><p class="eyebrow">Seguimiento de meta mensual</p><h2 id="goalsTitle">Metas mensuales</h2><p>Capture o importe la meta por KAM. Se guardan localmente para el mes seleccionado.</p></div><div class="goal-actions"><button id="importGoals" class="button secondary">Importar CSV</button><button id="addGoal" class="button primary">Capturar meta</button><input id="goalFile" type="file" accept=".csv" hidden /></div></section>
-      <section class="goals-section"><div><p class="eyebrow">Seguimiento de meta mensual</p><h2 id="goalsTitle">Meta mensual</h2><p>Capture o importe la meta mensual por KAM.</p></div><div class="goal-actions"><button id="importGoals" class="button secondary">Importar CSV</button><button id="addGoal" class="button primary">Capturar meta</button><input id="goalFile" type="file" accept=".csv" hidden /></div></section>
-      <section class="panel"><div id="goalsEmpty" class="empty-state">Aún no hay metas cargadas. Capture una meta por KAM para medir la brecha.</div><div class="table-wrap"><table id="goalsTable" hidden><thead><tr><th>KAM</th><th id="goalPeriodHeader">Meta mensual</th><th>Cierre real</th><th>Cierre estimado</th><th>Brecha</th><th>Avance</th><th></th></tr></thead><tbody></tbody></table></div></section>
+      <section class="goals-section">
+        <div>
+          <p class="eyebrow">Seguimiento de meta mensual</p>
+          <h2 id="goalsTitle">Meta mensual</h2>
+          <p>Capture o importe la meta mensual por KAM.</p>
+        </div>
+        <div class="goal-actions">
+          <button id="importGoals" class="button secondary">Importar CSV</button>
+          <button id="addGoal" class="button primary">Capturar meta</button>
+          <input id="goalFile" type="file" accept=".csv" hidden />
+        </div>
+      </section>
 
-      <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Responsabilidad comercial</p><h2>Desempeño por KAM</h2></div><span class="note">Clic en una fila para ver sus casos</span></div><div class="table-wrap"><table><thead><tr><th>#</th><th>KAM</th><th>Cotizaciones</th><th>Cotizado</th><th>Cerrado</th><th>Estimado</th><th>Conversión</th><th>Pipeline abierto</th><th>Cotizaciones confirmadas</th><th>Canceladas</th><th>Médicos</th><th>Motivo principal</th></tr></thead><tbody id="kamTable"></tbody></table></div></section>
+      <section class="panel">
+        <div id="goalsEmpty" class="empty-state">Aún no hay metas cargadas. Capture una meta por KAM para medir la brecha.</div>
+        <div class="table-wrap">
+          <table id="goalsTable" hidden>
+            <thead>
+              <tr>
+                <th>KAM</th>
+                <th id="goalPeriodHeader">Meta mensual</th>
+                <th>Cierre real</th>
+                <th>Cierre estimado</th>
+                <th>Brecha</th>
+                <th>Avance</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-      <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Profundización comercial</p><h2>KAM → médico</h2></div><span id="doctorCount" class="note">0 médicos</span></div><p class="small">Agrupa variantes del mismo nombre y separa el desempeño de cada médico por KAM. Clic en una fila para aplicar ambos filtros.</p><div class="table-wrap"><table><thead><tr><th>KAM</th><th>Médico</th><th>Cotizaciones</th><th>Cotizado</th><th>Cierres</th><th>Conversión</th><th>Pipeline abierto</th><th>Diagnóstico</th></tr></thead><tbody id="doctorTable"></tbody></table></div></section>
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Responsabilidad comercial</p>
+            <h2>Desempeño por KAM</h2>
+          </div>
+          <span class="note">Clic en una fila para ver sus casos</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>KAM</th>
+                <th>Cotizaciones</th>
+                <th>Cotizado</th>
+                <th>Cerrado</th>
+                <th>Estimado</th>
+                <th>Conversión</th>
+                <th>Pipeline abierto</th>
+                <th>Cotizaciones confirmadas</th>
+                <th>Canceladas</th>
+                <th>Médicos</th>
+                <th>Motivo principal</th>
+              </tr>
+            </thead>
+            <tbody id="kamTable"></tbody>
+          </table>
+        </div>
+      </section>
 
-      <section class="panel case-panel" style="display:none!important" hidden><div class="panel-heading"><div><p class="eyebrow">Control de ejecución</p><h2>Seguimiento caso a caso</h2></div><span id="caseCount" class="note"></span></div><div class="table-wrap cases"><table><thead><tr><th>Riesgo</th><th>Emisión</th><th>Folio</th><th>KAM</th><th>Médico / paciente</th><th>Marca</th><th>Cotización</th><th>Estatus</th><th>¿Cerró?</th><th>Fecha cierre</th><th>Motivo / comentario</th><th>Próxima acción</th><th>Días abiertos</th><th></th></tr></thead><tbody id="caseTable"></tbody></table></div></section>
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Profundización comercial</p>
+            <h2>KAM → médico</h2>
+          </div>
+          <span id="doctorCount" class="note">0 médicos</span>
+        </div>
+        <p class="small">Agrupa variantes del mismo nombre y separa el desempeño de cada médico por KAM. Clic en una fila para aplicar ambos filtros.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>KAM</th>
+                <th>Médico</th>
+                <th>Cotizaciones</th>
+                <th>Cotizado</th>
+                <th>Cierres</th>
+                <th>Conversión</th>
+                <th>Pipeline abierto</th>
+                <th>Diagnóstico</th>
+              </tr>
+            </thead>
+            <tbody id="doctorTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel case-panel" style="display:none!important" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Control de ejecución</p>
+            <h2>Seguimiento caso a caso</h2>
+          </div>
+          <span id="caseCount" class="note"></span>
+        </div>
+        <div class="table-wrap cases">
+          <table>
+            <thead>
+              <tr>
+                <th>Riesgo</th>
+                <th>Emisión</th>
+                <th>Folio</th>
+                <th>KAM</th>
+                <th>Médico / paciente</th>
+                <th>Marca</th>
+                <th>Cotización</th>
+                <th>Estatus</th>
+                <th>¿Cerró?</th>
+                <th>Fecha cierre</th>
+                <th>Motivo / comentario</th>
+                <th>Próxima acción</th>
+                <th>Días abiertos</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="caseTable"></tbody>
+          </table>
+        </div>
+      </section>
     </main>
+
     <p id="toast" class="toast" role="status" aria-live="polite"></p>
-    <dialog id="goalDialog"><form method="dialog"><button class="dialog-close" value="cancel">×</button><p id="goalDialogPeriod" class="eyebrow">Meta mensual</p><h2>Capturar meta por KAM</h2><label>KAM <input id="goalKam" required placeholder="Nombre del KAM" /></label><label>Meta mensual (MXN) <input id="goalValue" required type="number" min="0" step="1" /></label><button id="saveGoal" value="default" class="button primary">Guardar meta</button></form></dialog>
+
+    <dialog id="goalDialog">
+      <form method="dialog">
+        <button class="dialog-close" value="cancel">×</button>
+        <p id="goalDialogPeriod" class="eyebrow">Meta mensual</p>
+        <h2>Capturar meta por KAM</h2>
+        <label>KAM <input id="goalKam" required placeholder="Nombre del KAM" /></label>
+        <label>Meta mensual (MXN) <input id="goalValue" required type="number" min="0" step="1" /></label>
+        <button id="saveGoal" value="default" class="button primary">Guardar meta</button>
+      </form>
+    </dialog>
+
     <script type="module" src="./main.js"></script>
   </body>
 </html>
