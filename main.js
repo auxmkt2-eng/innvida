@@ -13,6 +13,14 @@ const $=s=>document.querySelector(s), sum=(a,f=x=>x)=>a.reduce((t,x)=>t+(Number(
 const keyNorm=s=>norm(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
 const STATUS_ALIASES={"sinseguimiento":"Sin seguimiento","cotizacionenviada":"Cotización enviada","ennegociacion":"En negociación","cerrada":"Cerrada / aceptada","aceptada":"Cerrada / aceptada","cerradaaceptada":"Cerrada / aceptada","perdida":"Perdida / rechazada","rechazada":"Perdida / rechazada","perdidarechazada":"Perdida / rechazada","cancelada":"Cancelada","cancelado":"Cancelada","cancelacion":"Cancelada"};
 const canonicalStatus=value=>STATUS_ALIASES[keyNorm(value)]||(value||"Sin seguimiento").toString().trim();
+// Variantes verificadas que corresponden al mismo KAM. Agregue aquí solo alias confirmados.
+const KAM_ALIASES={
+  "efrainicamarin":"EFRÁIN I. CAMARÍN SÁNCHEZ",
+  "efrainicamarinsanchez":"EFRÁIN I. CAMARÍN SÁNCHEZ",
+  "drefrainicamarin":"EFRÁIN I. CAMARÍN SÁNCHEZ",
+  "drefrainicamarinsanchez":"EFRÁIN I. CAMARÍN SÁNCHEZ"
+};
+function canonicalKam(value){const raw=String(value||"").trim();if(!raw)return "";const id=keyNorm(raw);if(KAM_ALIASES[id])return KAM_ALIASES[id];return raw.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g," ").trim().replace(/\s+/g," ").toLocaleUpperCase("es-MX")}
 function firstValue(data,names){const wanted=new Set(names.map(keyNorm));const entry=Object.entries(data).find(([key,value])=>wanted.has(keyNorm(key))&&value!==undefined&&value!==null&&String(value).trim()!=="");return entry?entry[1]:""}
 const validDate=v=>{if(!v)return null;const d=new Date(`${String(v).slice(0,10)}T12:00:00`);return Number.isNaN(d.valueOf())?null:d};
 const isoToday=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
@@ -21,7 +29,7 @@ const goalPeriod=()=>monthName.format(validDate(`${goalKey()}-01`));
 const goalStorageKey=key=>`innvida-goals-${key}`;
 function syncGoalPeriod(){const next=goalKey();if(next!==activeGoalKey){activeGoalKey=next;goals=JSON.parse(localStorage.getItem(goalStorageKey(next))||"[]")}const label=`Metas de ${goalPeriod()}`;$('#goalsTitle').textContent=label;$('#goalPeriodHeader').textContent=`Meta ${goalPeriod()}`;$('#goalDialogPeriod').textContent=`Meta ${goalPeriod()}`;}
 function showToast(message,kind="success"){const toast=$('#toast');toast.textContent=message;toast.className=`toast show ${kind}`;clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.className="toast",3600)}
-function mapDoc(snap, brand){const d=snap.data(), phone=d.telefono||"", site=brand==="SANARE"?({"722 197 08 36":"Toluca","55 5255 8403":"Narvarte"}[phone.trim()]||""):"";return {id:snap.id,brand,folio:d.folio||"—",date:d.fechaEmision||"",closeDate:d.fechaCierre||"",patient:d.paciente||"",doctor:d.medico||"",kam:d.kam||"",insurer:d.aseguradora||"",site,total:Number(d.total)||0,status:canonicalStatus(d.status1),status2:d.status2||"",reason:firstValue(d,REASON_FIELDS),nextAction:d.proximaAccion||d.seguimiento||"",items:brand==="NOMAD"?(d.pruebas||[]):(d.servicios||[]),collection:"cotizaciones"};}
+function mapDoc(snap, brand){const d=snap.data(), phone=d.telefono||"", site=brand==="SANARE"?({"722 197 08 36":"Toluca","55 5255 8403":"Narvarte"}[phone.trim()]||""):"";return {id:snap.id,brand,folio:d.folio||"—",date:d.fechaEmision||"",closeDate:d.fechaCierre||"",patient:d.paciente||"",doctor:d.medico||"",kam:canonicalKam(d.kam),insurer:d.aseguradora||"",site,total:Number(d.total)||0,status:canonicalStatus(d.status1),status2:d.status2||"",reason:firstValue(d,REASON_FIELDS),nextAction:d.proximaAccion||d.seguimiento||"",items:brand==="NOMAD"?(d.pruebas||[]):(d.servicios||[]),collection:"cotizaciones"};}
 function isClosed(r){return r.status==="Cerrada / aceptada"} function isLost(r){return ["Perdida / rechazada","Cancelada"].includes(r.status)}
 function daysOpen(r){const d=validDate(r.date);return d?Math.max(0,Math.floor((Date.now()-d)/86400000)):null}
 function risk(r){if(isClosed(r)||isLost(r))return "low";const days=daysOpen(r)||0;if(r.status==="Sin seguimiento"||days>30)return "high";if(days>14||r.status==="Cotización enviada")return "medium";return "low"}
