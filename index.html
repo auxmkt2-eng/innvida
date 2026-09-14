@@ -45,7 +45,11 @@
           </span>
         </label>
         <label>Marca
-          <select id="brandFilter"><option value="">Todas las marcas</option><option value="SANARE">Sanaré</option><option value="NOMAD">Nomad</option></select>
+          <select id="brandFilter">
+            <option value="">Todas las marcas</option>
+            <option value="SANARE">Sanaré</option>
+            <option value="NOMAD">Nomad</option>
+          </select>
         </label>
         <label>KAM
           <select id="kamFilter"><option value="">Todos los KAM</option></select>
@@ -117,7 +121,40 @@
       </section>
 
       <section class="panel">
-        <div id="goalsEmpty" class="empty-state">Aún no hay metas cargadas. Capture una meta por KAM para medir la brecha.</div>
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Explicación de no cierre</p>
+            <h2>¿Por qué el KAM no cierra?</h2>
+          </div>
+          <span class="note">Motivo documentado y antigüedad por responsable</span>
+        </div>
+
+        <div id="noCloseChart" class="closure-chart" aria-live="polite"></div>
+
+        <p class="chart-legend">
+          <i class="legend-followup"></i> En seguimiento
+          <i class="legend-no-followup"></i> Sin seguimiento
+          <i class="legend-lost"></i> Perdida o cancelada
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Resultado comercial</p>
+            <h2>Cotizaciones cerradas</h2>
+          </div>
+          <span id="closedCount" class="note">0 cierres</span>
+        </div>
+
+        <div id="closedChart" class="closure-chart closed-chart" aria-live="polite"></div>
+      </section>
+
+      <section class="panel">
+        <div id="goalsEmpty" class="empty-state">
+          Aún no hay metas cargadas. Capture una meta por KAM para medir la brecha.
+        </div>
+
         <div class="table-wrap">
           <table id="goalsTable" hidden>
             <thead>
@@ -144,6 +181,7 @@
           </div>
           <span class="note">Clic en una fila para ver sus casos</span>
         </div>
+
         <div class="table-wrap">
           <table>
             <thead>
@@ -171,66 +209,17 @@
       <section class="panel">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Explicación de no cierre</p>
-            <h2>¿Por qué el KAM no cierra?</h2>
-          </div>
-          <span class="note">Motivo documentado y antigüedad por responsable</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>KAM</th>
-                <th>No cerradas</th>
-                <th>En seguimiento</th>
-                <th>Sin seguimiento</th>
-                <th>Canceladas / perdidas</th>
-                <th>Días promedio abiertos</th>
-                <th>Más de 30 días</th>
-                <th>Monto no cerrado</th>
-                <th>Motivo principal</th>
-              </tr>
-            </thead>
-            <tbody id="noCloseTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Resultado comercial</p>
-            <h2>Cotizaciones cerradas</h2>
-          </div>
-          <span id="closedCount" class="note">0 cierres</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Folio</th>
-                <th>KAM</th>
-                <th>Médico / paciente</th>
-                <th>Cotización</th>
-                <th>Emisión</th>
-                <th>Fecha cierre</th>
-                <th>Días para cierre</th>
-              </tr>
-            </thead>
-            <tbody id="closedTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-heading">
-          <div>
             <p class="eyebrow">Profundización comercial</p>
             <h2>KAM → médico</h2>
           </div>
           <span id="doctorCount" class="note">0 médicos</span>
         </div>
-        <p class="small">Agrupa variantes del mismo nombre y separa el desempeño de cada médico por KAM. Clic en una fila para aplicar ambos filtros.</p>
+
+        <p class="small">
+          Agrupa variantes del mismo nombre y separa el desempeño de cada médico por KAM.
+          Clic en una fila para aplicar ambos filtros.
+        </p>
+
         <div class="table-wrap">
           <table>
             <thead>
@@ -258,6 +247,7 @@
           </div>
           <span id="caseCount" class="note"></span>
         </div>
+
         <div class="table-wrap cases">
           <table>
             <thead>
@@ -291,8 +281,17 @@
         <button class="dialog-close" value="cancel">×</button>
         <p id="goalDialogPeriod" class="eyebrow">Meta mensual</p>
         <h2>Capturar meta por KAM</h2>
-        <label>KAM <input id="goalKam" required placeholder="Nombre del KAM" /></label>
-        <label>Meta mensual (MXN) <input id="goalValue" required type="number" min="0" step="1" /></label>
+
+        <label>
+          KAM
+          <input id="goalKam" required placeholder="Nombre del KAM" />
+        </label>
+
+        <label>
+          Meta mensual (MXN)
+          <input id="goalValue" required type="number" min="0" step="1" />
+        </label>
+
         <button id="saveGoal" value="default" class="button primary">Guardar meta</button>
       </form>
     </dialog>
