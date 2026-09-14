@@ -25,6 +25,8 @@ Ambos proyectos usan Firestore, colección `cotizaciones`. Campos comunes: `foli
 ## Operación
 
 - La ponderación es: Cerrada/Aceptada 100%, En negociación 60%, Cotización enviada 35%, Sin seguimiento 15%, Perdida/Rechazada/Cancelada 0%.
+- La vista **¿Por qué el KAM no cierra?** es una tabla dinámica que responde a los filtros del tablero. Por cada KAM muestra cotizaciones no cerradas, casos en seguimiento y sin seguimiento, descartes, días promedio abiertos, casos mayores a 30 días, monto involucrado y el motivo más repetido. Si no hay motivo capturado, el tablero lo señala explícitamente; no inventa una causa.
+- La vista **Cotizaciones cerradas** lista exactamente qué folios cerraron, responsable, médico/paciente, monto, fecha de emisión, fecha de cierre y días requeridos para cerrar.
 - En el detalle, `Guardar` actualiza `status1`, `motivo`, `fechaCierre` y `proximaAccion` en Firestore. Si las reglas no autorizan escribir, muestra el error sin modificar el tablero.
 - “Generar reporte CEO” crea un `.xlsx` filtrado con resumen ejecutivo, una hoja por KAM y hallazgos/prioridades.
 - Para el reporte de viernes, seleccione el periodo y genere el archivo antes de las 12:00 pm. Para el lunes, filtre cada KAM y use los campos motivo/próxima acción en los casos no cerrados.
